@@ -1,0 +1,260 @@
+/**
+ * Bloch Golf - Main Application Layout
+ *
+ * Modern glassmorphism design with quantum-inspired aesthetics.
+ */
+
+/* App Container */
+.app {
+  min-height: 100vh;
+  position: relative;
+}
+
+/* Animated Background */
+.app::before {
+  content: '';
+  position: fixed;
+  inset: 0;
+  background:
+    radial-gradient(circle at 20% 20%, rgba(0, 212, 255, 0.08) 0%, transparent 40%),
+    radial-gradient(circle at 80% 80%, rgba(168, 85, 247, 0.08) 0%, transparent 40%),
+    radial-gradient(circle at 50% 50%, rgba(16, 185, 129, 0.05) 0%, transparent 50%);
+  pointer-events: none;
+  z-index: 0;
+}
+
+/* Layout Grid */
+.app-layout {
+  display: grid;
+  grid-template-columns: 320px 1fr;
+  min-height: 100vh;
+  gap: 0;
+  position: relative;
+  z-index: 1;
+}
+
+/* Sidebar */
+.sidebar {
+  background: rgba(10, 10, 15, 0.8);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border-right: 1px solid rgba(255, 255, 255, 0.06);
+  padding: var(--space-lg);
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  max-height: 100vh;
+  position: sticky;
+  top: 0;
+}
+
+/* Main Content Area */
+.main-content {
+  display: flex;
+  flex-direction: column;
+  padding: var(--space-lg);
+  gap: var(--space-lg);
+  position: relative;
+  min-height: 100vh;
+}
+
+/* Bloch Sphere Container */
+.bloch-container {
+  flex: 0 0 auto;
+  height: 55vh;
+  min-height: 350px;
+  background: rgba(255, 255, 255, 0.02);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  border-radius: var(--radius-xl);
+  overflow: hidden;
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  box-shadow:
+    0 4px 24px rgba(0, 0, 0, 0.3),
+    inset 0 0 80px rgba(0, 212, 255, 0.03);
+  position: relative;
+}
+
+.bloch-container::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: var(--radius-xl);
+  padding: 1px;
+  background: linear-gradient(
+    135deg,
+    rgba(0, 212, 255, 0.2) 0%,
+    transparent 50%,
+    rgba(168, 85, 247, 0.2) 100%
+  );
+  -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+  mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+  -webkit-mask-composite: xor;
+  mask-composite: exclude;
+  pointer-events: none;
+}
+
+/* Circuit Editor Section */
+.circuit-section {
+  background: rgba(255, 255, 255, 0.03);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border-radius: var(--radius-lg);
+  padding: var(--space-lg);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  box-shadow: 0 4px 24px rgba(0, 0, 0, 0.2);
+  animation: fade-in 0.4s ease-out;
+}
+
+.circuit-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: var(--space-md);
+  padding-bottom: var(--space-md);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.circuit-header h3 {
+  margin: 0;
+  font-size: 1rem;
+  font-weight: 600;
+  color: var(--color-text-primary);
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+}
+
+.circuit-header h3::before {
+  content: '';
+  width: 8px;
+  height: 8px;
+  background: var(--gradient-primary);
+  border-radius: 50%;
+  box-shadow: 0 0 12px var(--color-accent-cyan);
+}
+
+.gate-count {
+  font-size: 0.875rem;
+  color: var(--color-text-secondary);
+  font-weight: 500;
+}
+
+.gate-count span {
+  font-family: var(--font-mono);
+  font-weight: 700;
+  color: var(--color-accent-cyan);
+  text-shadow: 0 0 10px rgba(0, 212, 255, 0.5);
+}
+
+/* Circuit Editor Container */
+.circuit-editor-container {
+  background: rgba(0, 0, 0, 0.3);
+  border-radius: var(--radius-md);
+  padding: var(--space-md);
+  margin-bottom: var(--space-md);
+  min-height: 100px;
+  max-height: 300px;
+  overflow: auto;
+  border: 1px solid rgba(255, 255, 255, 0.04);
+}
+
+/* Custom scrollbar for circuit editor */
+.circuit-editor-container::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+.circuit-editor-container::-webkit-scrollbar-track {
+  background: rgba(255, 255, 255, 0.05);
+  border-radius: 4px;
+}
+
+.circuit-editor-container::-webkit-scrollbar-thumb {
+  background: rgba(0, 212, 255, 0.3);
+  border-radius: 4px;
+}
+
+.circuit-editor-container::-webkit-scrollbar-thumb:hover {
+  background: rgba(0, 212, 255, 0.5);
+}
+
+/* Circuit Actions */
+.circuit-actions {
+  display: flex;
+  gap: var(--space-md);
+}
+
+.clear-btn {
+  flex: 1;
+  background: rgba(255, 255, 255, 0.05);
+  color: var(--color-text-secondary);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  padding: var(--space-md) var(--space-lg);
+  border-radius: var(--radius-md);
+  font-size: 0.9rem;
+  font-weight: 500;
+  transition: var(--transition-normal);
+  transition-property: background, color, border-color, transform;
+}
+
+.clear-btn:hover:not(:disabled) {
+  background: rgba(255, 255, 255, 0.1);
+  color: var(--color-text-primary);
+  border-color: rgba(255, 255, 255, 0.2);
+  transform: translateY(-1px);
+}
+
+.clear-btn:active:not(:disabled) {
+  transform: translateY(0);
+}
+
+/* Responsive Design */
+@media (max-width: 1024px) {
+  .app-layout {
+    grid-template-columns: 280px 1fr;
+  }
+
+  .sidebar {
+    padding: var(--space-md);
+  }
+
+  .main-content {
+    padding: var(--space-md);
+    gap: var(--space-md);
+  }
+}
+
+@media (max-width: 768px) {
+  .app-layout {
+    grid-template-columns: 1fr;
+    grid-template-rows: auto auto;
+  }
+
+  .sidebar {
+    border-right: none;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+    max-height: none;
+    position: relative;
+    top: auto;
+  }
+
+  .main-content {
+    min-height: auto;
+  }
+
+  .bloch-container {
+    height: 45vh;
+    min-height: 280px;
+  }
+}
+
+@media (max-width: 480px) {
+  .circuit-actions {
+    flex-direction: column;
+  }
+
+  .circuit-section {
+    padding: var(--space-md);
+  }
+}
