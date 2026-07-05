@@ -41,6 +41,8 @@ const INITIAL_BLOCH_STATE: BlochState = { theta: 0, phi: 0 };
 function App() {
   const [gameState, setGameState] = useState<GameState>(createInitialGameState);
   const [circuit, setCircuit] = useState<Circuit>(INITIAL_CIRCUIT);
+  // Bumped on Reset Game to force-remount QamposerMicro (it's uncontrolled via defaultCircuit).
+  const [editorKey, setEditorKey] = useState(0);
 
   // Animation state
   const [triggerAnimation, setTriggerAnimation] = useState(false);
@@ -163,7 +165,8 @@ function App() {
     }));
   }, [displayState, gameState.targetState]);
 
-  // Handle next hole
+  // Handle next hole — keep the circuit and ball position; only swap the target.
+  // The ball stays where the previous hole's flag was, so circuit ↔ ball remain consistent.
   const handleNextHole = useCallback(() => {
     const nextTarget = getNextTarget(gameState.targetState.id);
 
@@ -171,21 +174,13 @@ function App() {
       ...prev,
       currentHole: prev.currentHole + 1,
       currentStrokes: 0,
-      currentState: INITIAL_BLOCH_STATE,
       targetState: nextTarget,
       isHoleComplete: false,
       completedHoles: [...prev.completedHoles, prev.currentHole],
     }));
-
-    setCircuit(INITIAL_CIRCUIT);
-    prevCircuitRef.current = INITIAL_CIRCUIT;
-    setDisplayState(INITIAL_BLOCH_STATE);
-    setGatesToAnimate(null);
-    setAnimationStartState(null);
-    setTriggerAnimation(false);
   }, [gameState.targetState.id]);
 
-  // Handle game reset
+  // Handle game reset — also clear QamposerMicro's visible gates via key bump.
   const handleReset = useCallback(() => {
     setGameState(createInitialGameState());
     setCircuit(INITIAL_CIRCUIT);
@@ -195,6 +190,7 @@ function App() {
     setGatesToAnimate(null);
     setAnimationStartState(null);
     isAnimatingRef.current = false;
+    setEditorKey((k) => k + 1);
   }, []);
 
   // Sync displayState with currentState when not animating
@@ -241,11 +237,12 @@ function App() {
 
             <div className="circuit-editor-container">
               <QamposerMicro
+                key={editorKey}
                 defaultCircuit={circuit}
                 onCircuitChange={handleCircuitChange}
                 config={{
                   maxQubits: 1,
-                  maxGates: 8,
+                  maxGates: 32,
                 }}
                 showHeader={false}
               />
