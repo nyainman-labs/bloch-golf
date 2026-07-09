@@ -151,8 +151,9 @@ export function BlochScene({
           powerPreference: 'high-performance',
         }}
         style={{
-          background: 'radial-gradient(ellipse at center, #1a1a2e 0%, #0a0a0f 60%, #050508 100%)',
-          borderRadius: '24px',
+          background:
+            'radial-gradient(ellipse at 50% 35%, #1a2a1c 0%, #0d150e 60%, #060a07 100%)',
+          borderRadius: '8px',
         }}
       >
         <BlochSceneContent

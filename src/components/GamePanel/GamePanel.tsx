@@ -24,12 +24,16 @@ export function GamePanel({ gameState, onNextHole, onReset }: GamePanelProps) {
   } = gameState;
 
   const scoreClass = totalScore < 0 ? 'under-par' : totalScore > 0 ? 'over-par' : 'par';
+  const totalText = totalScore === 0 ? 'E' : totalScore > 0 ? `+${totalScore}` : `${totalScore}`;
 
   return (
     <div className="game-panel">
       <div className="game-panel-header">
-        <h2 className="game-title">Bloch Golf</h2>
-        <div className="hole-indicator">Hole {currentHole}</div>
+        <div className="brand-row">
+          <span className="brand-mark" aria-hidden="true"></span>
+          <h2 className="game-title">Bloch Golf</h2>
+        </div>
+        <div className="hole-indicator">Hole {String(currentHole).padStart(2, '0')}</div>
       </div>
 
       <div className="target-info">
@@ -47,9 +51,7 @@ export function GamePanel({ gameState, onNextHole, onReset }: GamePanelProps) {
 
         <div className="total-score">
           <span className="score-label">Total</span>
-          <span className={`score-value ${scoreClass}`}>
-            {totalScore === 0 ? 'E' : totalScore > 0 ? `+${totalScore}` : totalScore}
-          </span>
+          <span className={`score-value ${scoreClass}`}>{totalText}</span>
         </div>
       </div>
 
@@ -64,12 +66,6 @@ export function GamePanel({ gameState, onNextHole, onReset }: GamePanelProps) {
         </div>
       )}
 
-      <div className="game-actions">
-        <button className="reset-btn" onClick={onReset}>
-          Reset Game
-        </button>
-      </div>
-
       <div className="instructions">
         <h3>How to Play</h3>
         <ol>
@@ -78,6 +74,12 @@ export function GamePanel({ gameState, onNextHole, onReset }: GamePanelProps) {
           <li>Navigate to the target state</li>
           <li>Fewer gates = better score!</li>
         </ol>
+      </div>
+
+      <div className="game-actions">
+        <button className="reset-btn" onClick={onReset}>
+          Reset Game
+        </button>
       </div>
     </div>
   );
