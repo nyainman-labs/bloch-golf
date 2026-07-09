@@ -21,6 +21,7 @@ import { GrassSphere } from './GrassSphere';
 import { GolfBall } from './GolfBall';
 import { HoleCup } from './HoleCup';
 import { AxisLabels } from './AxisLabels';
+import { Axes } from './Axes';
 import { Celebration } from '../Effects';
 
 interface BlochSceneContentProps {
@@ -93,6 +94,7 @@ function BlochSceneContent({
           onAnimationComplete={onAnimationComplete}
         />
         <HoleCup targetState={targetState} sphereRadius={sphereRadius} />
+        <Axes sphereRadius={sphereRadius} />
         <AxisLabels sphereRadius={sphereRadius} />
       </group>
 
