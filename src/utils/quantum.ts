@@ -235,15 +235,6 @@ export function countGates(circuit: Circuit): number {
 }
 
 /**
- * Circuit change type
- */
-export type CircuitChangeType =
-  | { type: 'none' }
-  | { type: 'add'; addedGates: Gate[]; startState: BlochState }
-  | { type: 'delete'; newState: BlochState }
-  | { type: 'edit'; editedGateIndex: number; startState: BlochState; gatesFromEdit: Gate[] };
-
-/**
  * Get sorted single-qubit gates from a circuit
  */
 export function getSortedGates(circuit: Circuit): Gate[] {
@@ -269,94 +260,17 @@ export function calculateIntermediateState(gates: Gate[], upToIndex: number): Bl
 }
 
 /**
- * Compare two gates for equality (same type, position, and parameter)
+ * Compare two gates for equality.
+ *
+ * Matching is by identity plus parameter: `position` deliberately isn't
+ * compared, because inserting a gate shifts the columns of everything after it
+ * without changing which gates the ball has already played.
  */
-function gatesEqual(a: Gate, b: Gate): boolean {
+export function gatesEqual(a: Gate, b: Gate): boolean {
   return (
+    a.id === b.id &&
     a.type === b.type &&
-    a.position === b.position &&
     Math.abs((a.parameter ?? 0) - (b.parameter ?? 0)) < 1e-10
   );
 }
 
-/**
- * Detect the type of change between two circuits
- */
-export function detectCircuitChange(
-  prevCircuit: Circuit,
-  newCircuit: Circuit
-): CircuitChangeType {
-  const prevGates = getSortedGates(prevCircuit);
-  const newGates = getSortedGates(newCircuit);
-
-  // No change
-  if (prevGates.length === newGates.length) {
-    let allEqual = true;
-    let editedIndex = -1;
-
-    for (let i = 0; i < prevGates.length; i++) {
-      if (!gatesEqual(prevGates[i], newGates[i])) {
-        allEqual = false;
-        if (editedIndex === -1) {
-          editedIndex = i;
-        }
-      }
-    }
-
-    if (allEqual) {
-      return { type: 'none' };
-    }
-
-    // Gate edited (parameter changed)
-    if (editedIndex !== -1) {
-      const startState = calculateIntermediateState(newGates, editedIndex);
-      return {
-        type: 'edit',
-        editedGateIndex: editedIndex,
-        startState,
-        gatesFromEdit: newGates.slice(editedIndex),
-      };
-    }
-  }
-
-  // Gates added
-  if (newGates.length > prevGates.length) {
-    // Find added gates (simple case: gates appended at end or inserted)
-    const prevGateCount = prevGates.length;
-    const startState = calculateIntermediateState(newGates, prevGateCount);
-    const addedGates = newGates.slice(prevGateCount);
-
-    // If gates were inserted in the middle, recalculate
-    let insertIndex = -1;
-    for (let i = 0; i < prevGates.length; i++) {
-      if (!gatesEqual(prevGates[i], newGates[i])) {
-        insertIndex = i;
-        break;
-      }
-    }
-
-    if (insertIndex !== -1) {
-      // Gates were inserted in the middle
-      const startState = calculateIntermediateState(newGates, insertIndex);
-      return {
-        type: 'add',
-        addedGates: newGates.slice(insertIndex),
-        startState,
-      };
-    }
-
-    return {
-      type: 'add',
-      addedGates,
-      startState,
-    };
-  }
-
-  // Gates deleted
-  if (newGates.length < prevGates.length) {
-    const newState = calculateBlochState(newCircuit);
-    return { type: 'delete', newState };
-  }
-
-  return { type: 'none' };
-}
