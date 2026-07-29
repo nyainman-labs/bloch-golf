@@ -1,9 +1,14 @@
 /**
  * Impact Sound
  *
- * The project ships no audio assets, so the club's impact is synthesised
- * procedurally with the Web Audio API: a square-wave chirp for the retro
- * "thock" plus a short filtered noise burst for the click of the strike.
+ * The project ships no audio assets, so the putt is synthesised procedurally
+ * with the Web Audio API.
+ *
+ * A real putter makes a short, round "tock": the click of contact plus the
+ * body of the head ringing briefly. That is modelled here as a very short
+ * band-passed noise burst layered over three exponentially decaying sine
+ * partials. Deliberately no pitch sweep — sweeping reads as something flying
+ * away rather than something being struck.
  */
 
 const MUTE_KEY = 'bloch-golf:muted';
@@ -74,45 +79,67 @@ function getNoiseBuffer(context: AudioContext): AudioBuffer {
 }
 
 /**
- * Play the club-on-ball impact.
+ * Play the putter-on-ball impact.
+ *
+ * Tuning the feel only needs the numbers below: `level` for loudness,
+ * `PARTIALS` for pitch/brightness/length.
  *
  * @param strength 0–1, scaled from the gate's rotation angle so a π rotation
- *                 hits harder than a π/4 one.
+ *                 is struck more firmly than a π/4 one.
  */
 export function playImpact(strength: number = 1): void {
   if (muted || !ctx || ctx.state !== 'running') return;
 
   const context = ctx;
   const now = context.currentTime;
-  const gain = 0.18 * Math.max(0.35, Math.min(strength, 1));
+  const s = Math.max(0, Math.min(strength, 1));
 
-  const master = context.createGain();
-  master.gain.setValueAtTime(0.0001, now);
-  master.gain.linearRampToValueAtTime(gain, now + 0.001);
-  master.gain.exponentialRampToValueAtTime(0.0001, now + 0.13);
-  master.connect(context.destination);
+  // A putt is a quiet sound to begin with. A firmer one is louder and, via the
+  // partial levels below, slightly brighter.
+  const level = 0.11 * (0.5 + 0.5 * s);
 
-  // Pitch-swept square wave — the body of the "thock"
-  const osc = context.createOscillator();
-  osc.type = 'square';
-  osc.frequency.setValueAtTime(1200, now);
-  osc.frequency.exponentialRampToValueAtTime(300, now + 0.07);
-  osc.connect(master);
-  osc.start(now);
-  osc.stop(now + 0.14);
+  // Nudge the pitch a few percent per shot so a run of gates doesn't sound
+  // like a machine gun.
+  const detune = 1 + (Math.random() - 0.5) * 0.06;
 
-  // Filtered noise transient — the click of contact
+  // The head ringing: [frequency, level relative to `level`, decay seconds].
+  // The upper partials fade out as the strike softens — that is what makes a
+  // gentle putt read as duller rather than merely quieter.
+  const partials: Array<[number, number, number]> = [
+    [820, 1.0, 0.085],
+    [1600, 0.55 * (0.6 + 0.4 * s), 0.045],
+    [3100, 0.25 * (0.4 + 0.6 * s), 0.018],
+  ];
+
+  for (const [frequency, amp, decay] of partials) {
+    const osc = context.createOscillator();
+    osc.type = 'sine';
+    osc.frequency.setValueAtTime(frequency * detune, now);
+
+    const gain = context.createGain();
+    gain.gain.setValueAtTime(level * amp, now);
+    gain.gain.exponentialRampToValueAtTime(0.0001, now + decay);
+
+    osc.connect(gain);
+    gain.connect(context.destination);
+    osc.start(now);
+    osc.stop(now + decay + 0.01);
+  }
+
+  // The click of contact. This has to scale with `s` as well: leaving it at a
+  // fixed level makes a soft putt *brighter* than a firm one, because the
+  // click then dominates the quietened partials.
   const noise = context.createBufferSource();
   noise.buffer = getNoiseBuffer(context);
 
   const bandpass = context.createBiquadFilter();
   bandpass.type = 'bandpass';
-  bandpass.frequency.setValueAtTime(3000, now);
-  bandpass.Q.setValueAtTime(1.2, now);
+  bandpass.frequency.setValueAtTime(2600, now);
+  bandpass.Q.setValueAtTime(0.9, now);
 
   const noiseGain = context.createGain();
-  noiseGain.gain.setValueAtTime(gain * 0.9, now);
-  noiseGain.gain.exponentialRampToValueAtTime(0.0001, now + 0.025);
+  noiseGain.gain.setValueAtTime(level * 0.5 * (0.5 + 0.5 * s), now);
+  noiseGain.gain.exponentialRampToValueAtTime(0.0001, now + 0.009);
 
   noise.connect(bandpass);
   bandpass.connect(noiseGain);
