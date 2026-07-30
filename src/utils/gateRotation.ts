@@ -162,13 +162,56 @@ export function blochAxisToThreeJS(axis: THREE.Vector3): THREE.Vector3 {
 }
 
 /**
+ * Smallest |axis × position| we treat as real travel.
+ *
+ * The ball circles the axis on a arc of radius |axis × position| = sin θ, so
+ * below this the furthest it can move is π · 1.5 · 1e-3 ≈ 0.005 units — about
+ * 4% of the ball's radius, which is invisible.
+ */
+const MIN_TRAVEL_SQ = 1e-3 * 1e-3;
+
+/**
+ * Direction the ball starts travelling in when a rotation is applied.
+ *
+ * The ball traces a circle about `axis`, so its velocity at t=0 is along
+ * `axis × position`, signed by the direction of rotation. This is what the
+ * club aims at, so its face points where the ball will actually go.
+ *
+ * Returns null when the ball sits on the rotation axis (e.g. Z applied to |0⟩)
+ * and therefore cannot move: a phase-only gate has no travel direction, so
+ * there is nothing for a club to be aimed along.
+ *
+ * @param position - Ball position as a unit vector in Three.js coordinates
+ * @param axis - Rotation axis in Three.js coordinates (already converted)
+ * @param angle - Rotation angle in radians (sign matters)
+ */
+export function initialTangent(
+  position: THREE.Vector3,
+  axis: THREE.Vector3,
+  angle: number,
+): THREE.Vector3 | null {
+  const tangent = new THREE.Vector3().crossVectors(axis, position);
+
+  if (tangent.lengthSq() < MIN_TRAVEL_SQ) {
+    return null;
+  }
+
+  tangent.normalize();
+  if (angle < 0) {
+    tangent.negate();
+  }
+  return tangent;
+}
+
+/**
  * Calculate animation duration based on rotation angle.
  * Larger rotations take longer to animate.
  *
- * Formula: T = 3.6s + 2.4s * min(|θ|/π, 1)
- * Range: 3.6s to 6.0s (slow, smooth rolling animation)
+ * Formula: T = 0.8s + 0.6s * min(|θ|/π, 1)
+ * Range: 0.8s to 1.4s. Combined with the club's ~0.45s wind-up this puts a
+ * single gate at roughly 1.25–1.85s, which keeps a multi-gate sequence brisk.
  */
 export function calculateAnimationDuration(angle: number): number {
   const normalizedAngle = Math.min(Math.abs(angle) / Math.PI, 1);
-  return 1.8 + 1.2 * normalizedAngle;
+  return 0.8 + 0.6 * normalizedAngle;
 }

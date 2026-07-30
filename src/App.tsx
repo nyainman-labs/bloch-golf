@@ -4,10 +4,13 @@
  * A quantum computing educational game where players use quantum gates
  * to navigate a golf ball on the Bloch sphere to target quantum states.
  *
- * The circuit is declarative: the ball position always reflects the circuit state.
- * - Gate added: animate from previous position
- * - Gate deleted: instantly move to correct position (no animation)
- * - Gate edited: animate from the state before the edited gate
+ * Each gate is one golf shot: the club winds up at the ball, strikes it, and
+ * the ball rolls along that gate's rotation. Shots are queued here rather than
+ * in the 3D layer so the circuit stays editable while a swing is playing:
+ * - Gate added: queued, and played once the shots ahead of it finish
+ * - Gate deleted before its swing starts: dropped from the queue, never played
+ * - Gate deleted or edited after the ball has played it: the ball rewinds to
+ *   that point and the remaining gates are played again
  */
 
 import { useState, useCallback, useRef, useEffect } from "react";
@@ -23,10 +26,12 @@ import {
   type BlochState,
 } from "./types/game";
 import {
-  calculateBlochState,
+  calculateIntermediateState,
   countGates,
-  detectCircuitChange,
+  getSortedGates,
 } from "./utils/quantum";
+import { buildShots, findDivergence, type Shot } from "./utils/shotQueue";
+import { primeAudio, playImpact, isMuted, setMuted } from "./utils/audio";
 import "./App.css";
 
 // Initial circuit with single qubit
@@ -43,127 +48,152 @@ function App() {
   const [circuit, setCircuit] = useState<Circuit>(INITIAL_CIRCUIT);
   // Bumped on Reset Game to force-remount QamposerMicro (it's uncontrolled via defaultCircuit).
   const [editorKey, setEditorKey] = useState(0);
+  const [soundOn, setSoundOn] = useState(() => !isMuted());
 
-  // Animation state
-  const [triggerAnimation, setTriggerAnimation] = useState(false);
-  const [gatesToAnimate, setGatesToAnimate] = useState<Gate[] | null>(null);
-  const [animationStartState, setAnimationStartState] =
-    useState<BlochState | null>(null);
+  // Where the ball rests once every queued shot has been played
+  const [restState, setRestState] = useState<BlochState>(INITIAL_BLOCH_STATE);
+  // The shot being played right now
+  const [activeShot, setActiveShot] = useState<Shot | null>(null);
+  // Bumped to teleport the ball to restState without animating
+  const [snapToken, setSnapToken] = useState(0);
 
-  // Display state (where the ball should be displayed)
-  const [displayState, setDisplayState] =
-    useState<BlochState>(INITIAL_BLOCH_STATE);
+  // Mirrors of the above, so the useFrame-driven callbacks below can read and
+  // advance the queue without waiting for a React render.
+  const shotQueueRef = useRef<Shot[]>([]);
+  const activeShotRef = useRef<Shot | null>(null);
+  const restStateRef = useRef<BlochState>(INITIAL_BLOCH_STATE);
+  /** Gates the ball has already been hit through, including the one in flight */
+  const playedGatesRef = useRef<Gate[]>([]);
+  /** The circuit's gates in play order, as of the last change */
+  const sortedGatesRef = useRef<Gate[]>([]);
 
-  // Track previous circuit for change detection
-  const prevCircuitRef = useRef<Circuit>(INITIAL_CIRCUIT);
-  const isAnimatingRef = useRef(false);
-
-  // Handle circuit changes from QamposerMicro
-  const handleCircuitChange = useCallback(
-    (newCircuit: Circuit) => {
-      if (isAnimatingRef.current) {
-        // Don't process changes during animation
-        return;
+  // Browsers only allow an AudioContext to start from a user gesture. Listen
+  // broadly and keep retrying until it is actually running, rather than
+  // spending a single `once` listener on an event that may not be enough.
+  useEffect(() => {
+    const events = ["pointerdown", "mousedown", "touchstart", "keydown"] as const;
+    const onInput = () => {
+      if (primeAudio()) {
+        events.forEach((e) => document.removeEventListener(e, onInput));
       }
+    };
 
-      const prevCircuit = prevCircuitRef.current;
-      const change = detectCircuitChange(prevCircuit, newCircuit);
+    events.forEach((e) => document.addEventListener(e, onInput));
+    return () => events.forEach((e) => document.removeEventListener(e, onInput));
+  }, []);
 
-      // Calculate the target state from the new circuit
-      const targetBallState =
-        newCircuit.gates.length > 0
-          ? calculateBlochState(newCircuit)
-          : INITIAL_BLOCH_STATE;
+  // The ball has come to rest with nothing left to play — score the hole.
+  const settle = useCallback(
+    (finalState: BlochState) => {
+      const inHole = isInHole(finalState, gameState.targetState.state);
+      const par = gameState.targetState.par;
 
-      // Handle based on change type
-      switch (change.type) {
-        case "none":
-          // No change, do nothing
-          break;
-
-        case "add":
-          // Gate added: animate the added gates
-          setAnimationStartState(change.startState);
-          setGatesToAnimate(change.addedGates);
-          setDisplayState(targetBallState);
-          isAnimatingRef.current = true;
-          setTriggerAnimation(true);
-
-          // Update strokes
-          setGameState((prev) => ({
-            ...prev,
-            isAnimating: true,
-            currentStrokes: prev.currentStrokes + change.addedGates.length,
-            totalStrokes: prev.totalStrokes + change.addedGates.length,
-          }));
-          break;
-
-        case "delete":
-          // Gate deleted: instantly move to correct position
-          setDisplayState(change.newState);
-          setGatesToAnimate(null);
-          setAnimationStartState(null);
-
-          // Check if we're in the hole after deletion
-          const inHoleAfterDelete = isInHole(
-            change.newState,
-            gameState.targetState.state,
-          );
-          setGameState((prev) => ({
-            ...prev,
-            currentState: change.newState,
-            isHoleComplete: inHoleAfterDelete,
-            totalScore:
-              inHoleAfterDelete && !prev.isHoleComplete
-                ? prev.totalScore +
-                  (prev.currentStrokes - gameState.targetState.par)
-                : prev.totalScore,
-          }));
-          break;
-
-        case "edit":
-          // Gate edited: animate from the state before the edited gate
-          setAnimationStartState(change.startState);
-          setGatesToAnimate(change.gatesFromEdit);
-          setDisplayState(targetBallState);
-          isAnimatingRef.current = true;
-          setTriggerAnimation(true);
-
-          setGameState((prev) => ({
-            ...prev,
-            isAnimating: true,
-          }));
-          break;
-      }
-
-      // Update refs
-      prevCircuitRef.current = newCircuit;
-      setCircuit(newCircuit);
+      setGameState((prev) => ({
+        ...prev,
+        currentState: finalState,
+        isAnimating: false,
+        isHoleComplete: inHole,
+        totalScore:
+          inHole && !prev.isHoleComplete
+            ? prev.totalScore + (prev.currentStrokes - par)
+            : prev.totalScore,
+      }));
     },
     [gameState.targetState],
   );
 
-  // Handle animation completion
-  const handleAnimationComplete = useCallback(() => {
-    isAnimatingRef.current = false;
-    setTriggerAnimation(false);
-    setGatesToAnimate(null);
-    setAnimationStartState(null);
+  // Hand the next queued shot to the 3D layer, or settle if the queue is empty.
+  const pumpQueue = useCallback(() => {
+    if (activeShotRef.current) return;
 
-    // Check if we're in the hole
-    const inHole = isInHole(displayState, gameState.targetState.state);
+    const next = shotQueueRef.current.shift();
 
-    setGameState((prev) => ({
-      ...prev,
-      currentState: displayState,
-      isAnimating: false,
-      isHoleComplete: inHole,
-      totalScore:
-        inHole && !prev.isHoleComplete
-          ? prev.totalScore + (prev.currentStrokes - gameState.targetState.par)
-          : prev.totalScore,
-    }));
-  }, [displayState, gameState.targetState]);
+    if (!next) {
+      setActiveShot(null);
+      settle(restStateRef.current);
+      return;
+    }
+
+    activeShotRef.current = next;
+    // Everything up to and including this gate now counts as played, so a
+    // later edit to any of it rewinds the ball rather than queueing a shot.
+    playedGatesRef.current = sortedGatesRef.current.slice(0, next.gateIndex + 1);
+    setActiveShot(next);
+    setGameState((prev) => (prev.isAnimating ? prev : { ...prev, isAnimating: true }));
+  }, [settle]);
+
+  // Handle circuit changes from QamposerMicro
+  const handleCircuitChange = useCallback(
+    (newCircuit: Circuit) => {
+      // Runs inside the drop/keypress that placed the gate — the most reliable
+      // user gesture we get, and always ahead of the impact it will sound.
+      primeAudio();
+
+      const newGates = getSortedGates(newCircuit);
+      const prevCount = sortedGatesRef.current.length;
+      sortedGatesRef.current = newGates;
+
+      const divergence = findDivergence(playedGatesRef.current, newGates);
+
+      if (divergence === null) {
+        // The ball's history still matches the circuit, so only the tail it
+        // hasn't reached yet needs rebuilding. Added gates land in the queue;
+        // gates deleted before their swing started simply drop out of it.
+        shotQueueRef.current = buildShots(newGates, playedGatesRef.current.length);
+      } else {
+        // A gate the ball already played was removed or edited — rewind to just
+        // before it and replay everything from there.
+        const rewound = calculateIntermediateState(newGates, divergence);
+
+        activeShotRef.current = null;
+        playedGatesRef.current = newGates.slice(0, divergence);
+        shotQueueRef.current = buildShots(newGates, divergence);
+        restStateRef.current = rewound;
+
+        setRestState(rewound);
+        setSnapToken((t) => t + 1);
+      }
+
+      // Strokes count gates added; deleting one has never refunded a stroke.
+      const added = Math.max(0, newGates.length - prevCount);
+      if (added > 0) {
+        setGameState((prev) => ({
+          ...prev,
+          currentStrokes: prev.currentStrokes + added,
+          totalStrokes: prev.totalStrokes + added,
+        }));
+      }
+
+      setCircuit(newCircuit);
+      pumpQueue();
+    },
+    [pumpQueue],
+  );
+
+  // The current shot has come to rest — commit it and start the next one.
+  const handleShotComplete = useCallback(() => {
+    const finished = activeShotRef.current;
+    activeShotRef.current = null;
+
+    if (finished) {
+      restStateRef.current = finished.endState;
+      setRestState(finished.endState);
+    }
+
+    pumpQueue();
+  }, [pumpQueue]);
+
+  const handleImpact = useCallback((strength: number) => {
+    playImpact(strength);
+  }, []);
+
+  const handleToggleSound = useCallback(() => {
+    setSoundOn((on) => {
+      setMuted(on);
+      if (!on) primeAudio();
+      return !on;
+    });
+  }, []);
 
   // Handle next hole — keep the circuit and ball position; only swap the target.
   // The ball stays where the previous hole's flag was, so circuit ↔ ball remain consistent.
@@ -182,23 +212,19 @@ function App() {
 
   // Handle game reset — also clear QamposerMicro's visible gates via key bump.
   const handleReset = useCallback(() => {
+    shotQueueRef.current = [];
+    activeShotRef.current = null;
+    playedGatesRef.current = [];
+    sortedGatesRef.current = [];
+    restStateRef.current = INITIAL_BLOCH_STATE;
+
     setGameState(createInitialGameState());
     setCircuit(INITIAL_CIRCUIT);
-    prevCircuitRef.current = INITIAL_CIRCUIT;
-    setDisplayState(INITIAL_BLOCH_STATE);
-    setTriggerAnimation(false);
-    setGatesToAnimate(null);
-    setAnimationStartState(null);
-    isAnimatingRef.current = false;
+    setActiveShot(null);
+    setRestState(INITIAL_BLOCH_STATE);
+    setSnapToken((t) => t + 1);
     setEditorKey((k) => k + 1);
   }, []);
-
-  // Sync displayState with currentState when not animating
-  useEffect(() => {
-    if (!isAnimatingRef.current) {
-      setDisplayState(gameState.currentState);
-    }
-  }, [gameState.currentState]);
 
   return (
     <div className="app">
@@ -209,6 +235,8 @@ function App() {
             gameState={gameState}
             onNextHole={handleNextHole}
             onReset={handleReset}
+            soundOn={soundOn}
+            onToggleSound={handleToggleSound}
           />
         </aside>
 
@@ -216,13 +244,13 @@ function App() {
         <main className="main-content">
           <div className="bloch-container">
             <BlochScene
-              displayState={displayState}
+              restState={restState}
+              snapToken={snapToken}
+              activeShot={activeShot}
               targetState={gameState.targetState.state}
-              gatesToAnimate={gatesToAnimate}
-              animationStartState={animationStartState}
-              triggerAnimation={triggerAnimation}
               isHoleComplete={gameState.isHoleComplete}
-              onAnimationComplete={handleAnimationComplete}
+              onShotComplete={handleShotComplete}
+              onImpact={handleImpact}
             />
           </div>
 
@@ -252,10 +280,12 @@ function App() {
               <button
                 className="clear-btn"
                 onClick={() => {
-                  const emptyCircuit = { ...INITIAL_CIRCUIT };
-                  handleCircuitChange(emptyCircuit);
+                  handleCircuitChange({ qubits: 1, gates: [] });
+                  // QamposerMicro is uncontrolled, so it needs a remount to
+                  // drop the gates it is still showing.
+                  setEditorKey((k) => k + 1);
                 }}
-                disabled={gameState.isAnimating || circuit.gates.length === 0}
+                disabled={circuit.gates.length === 0}
               >
                 Clear Circuit
               </button>

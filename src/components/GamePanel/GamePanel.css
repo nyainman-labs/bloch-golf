@@ -249,10 +249,12 @@
 /* Reset action — sticks to bottom */
 .game-actions {
   margin-top: auto;
+  display: flex;
+  gap: 8px;
 }
 
 .reset-btn {
-  width: 100%;
+  flex: 1;
   background: transparent;
   color: var(--fg3);
   border: 1px solid var(--line);
@@ -267,6 +269,28 @@
   background: var(--bg-elev);
   color: var(--fg2);
   border-color: var(--line-strong);
+}
+
+.sound-btn {
+  flex: 0 0 auto;
+  width: 42px;
+  background: transparent;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  padding: 12px 0;
+  font-size: 0.85rem;
+  line-height: 1;
+  cursor: pointer;
+  transition: all 200ms ease;
+}
+
+.sound-btn:hover {
+  background: var(--bg-elev);
+  border-color: var(--line-strong);
+}
+
+.sound-btn[aria-pressed='false'] {
+  opacity: 0.5;
 }
 
 /* Responsive */

@@ -9,3 +9,4 @@ export { HoleCup } from './HoleCup';
 export { AxisLabels } from './AxisLabels';
 export { Axes } from './Axes';
 export { BallTrail } from './BallTrail';
+export { GolfClub } from './GolfClub';

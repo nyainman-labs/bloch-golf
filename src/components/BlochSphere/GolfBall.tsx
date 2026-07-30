@@ -12,25 +12,34 @@
 import { useRef, useMemo, useEffect } from 'react';
 import { useFrame } from '@react-three/fiber';
 import * as THREE from 'three';
-import type { Gate } from '@qamposer/react';
 import type { BlochState } from '../../types/game';
+import type { Shot } from '../../utils/shotQueue';
 import { useBallAnimation } from '../../hooks/useBallAnimation';
 import { blochToVector } from '../../utils/gateRotation';
 import { BallTrail } from './BallTrail';
+import { GolfClub } from './GolfClub';
+import { ImpactBurst, type ImpactBurstHandle } from '../Effects/ImpactBurst';
 
 interface GolfBallProps {
-  /** Current display state (where the ball should be) */
-  displayState: BlochState;
-  /** Gates to animate (only the new/changed gates) */
-  gatesToAnimate: Gate[] | null;
-  /** Start state for animation */
-  animationStartState: BlochState | null;
+  /** Where the ball rests once every queued shot has been played */
+  restState: BlochState;
+  /**
+   * Bumped by the app to teleport the ball to `restState`.
+   *
+   * Repositioning is deliberately driven by this token rather than by
+   * `restState` changing: the app knows the ball's final state as soon as a
+   * gate is dropped, and reacting to that would warp the ball to its
+   * destination while the club is still winding up to hit it.
+   */
+  snapToken: number;
+  /** The shot currently being played, or null when the ball is at rest */
+  activeShot: Shot | null;
   /** Sphere radius */
   sphereRadius: number;
-  /** Callback when animation completes */
-  onAnimationComplete?: () => void;
-  /** Trigger animation (changes to true to start) */
-  triggerAnimation?: boolean;
+  /** Callback when the current shot comes to rest */
+  onShotComplete?: () => void;
+  /** Callback the instant the club connects, with strike strength (0-1) */
+  onImpact?: (strength: number) => void;
 }
 
 /**
@@ -95,16 +104,15 @@ function createDimpleTexture(size: number = 256): THREE.DataTexture {
 }
 
 export function GolfBall({
-  displayState,
-  gatesToAnimate,
-  animationStartState,
+  restState,
+  snapToken,
+  activeShot,
   sphereRadius,
-  onAnimationComplete,
-  triggerAnimation = false,
+  onShotComplete,
+  onImpact,
 }: GolfBallProps) {
   const ballRef = useRef<THREE.Mesh>(null);
-  const animatingRef = useRef(false);
-  const lastTriggerRef = useRef(false);
+  const burstRef = useRef<ImpactBurstHandle>(null);
 
   const ballRadius = sphereRadius * 0.08;
   const surfaceRadius = sphereRadius + ballRadius;
@@ -113,64 +121,62 @@ export function GolfBall({
   const dimpleNormalMap = useMemo(() => createDimpleTexture(256), []);
 
   // Animation system
-  const { startAnimation, updateFrame, resetToState, clearTrail, getTrailPoints } =
-    useBallAnimation(sphereRadius);
+  const {
+    startShot,
+    cancelShot,
+    updateFrame,
+    resetToState,
+    getTrailPoints,
+    getSwingFrame,
+  } = useBallAnimation(sphereRadius);
 
-  // Initial position from display state
+  // Initial position, before any shot has been played
   const initialPosition = useMemo(() => {
-    return blochToVector(displayState.theta, displayState.phi).multiplyScalar(surfaceRadius);
-  }, [displayState.theta, displayState.phi, surfaceRadius]);
+    return blochToVector(restState.theta, restState.phi).multiplyScalar(surfaceRadius);
+  }, [restState.theta, restState.phi, surfaceRadius]);
 
-  // Reset position when display state changes (without animation)
+  // Teleport to the resting state whenever the app bumps the snap token.
+  // Depending on snapToken alone (not restState) is what keeps the ball at
+  // address while the club winds up.
   useEffect(() => {
-    if (!animatingRef.current) {
-      resetToState(displayState);
-      // Clear trail when state changes without animation (e.g., gate deletion)
-      clearTrail();
-      if (ballRef.current) {
-        const pos = blochToVector(displayState.theta, displayState.phi).multiplyScalar(surfaceRadius);
-        ballRef.current.position.copy(pos);
-      }
+    cancelShot();
+    resetToState(restState);
+    if (ballRef.current) {
+      ballRef.current.position
+        .copy(blochToVector(restState.theta, restState.phi))
+        .multiplyScalar(surfaceRadius);
     }
-  }, [displayState, resetToState, clearTrail, surfaceRadius]);
+  }, [snapToken]); // restState is read on purpose only when the token changes
 
-  // Start animation when triggered
+  // Play a shot whenever the app hands over a new one
   useEffect(() => {
-    // Detect rising edge of triggerAnimation
-    if (
-      triggerAnimation &&
-      !lastTriggerRef.current &&
-      gatesToAnimate &&
-      gatesToAnimate.length > 0 &&
-      animationStartState
-    ) {
-      animatingRef.current = true;
-      startAnimation(gatesToAnimate, animationStartState);
+    if (activeShot) {
+      startShot(activeShot.gate, activeShot.startState);
     }
-    lastTriggerRef.current = triggerAnimation;
-  }, [triggerAnimation, gatesToAnimate, animationStartState, startAnimation]);
+  }, [activeShot, startShot]);
 
   // Update animation every frame
   useFrame((_, delta) => {
     if (!ballRef.current) return;
 
-    if (animatingRef.current) {
-      const frame = updateFrame(delta);
+    const frame = updateFrame(delta);
 
-      // Update ball position
+    if (frame.isActive) {
       ballRef.current.position.copy(frame.position);
-
-      // Update ball rotation (rolling)
       ballRef.current.quaternion.copy(frame.ballRotation);
-
-      // Check if animation complete
-      if (frame.isComplete) {
-        animatingRef.current = false;
-        onAnimationComplete?.();
-      }
     } else {
       // Idle animation - subtle rotation
       ballRef.current.rotation.y += delta * 0.1;
+    }
+
+    if (frame.impact) {
+      const { anchor, up, tangent, strength } = frame.impact;
+      burstRef.current?.burst(anchor, up, tangent, strength);
+      onImpact?.(strength);
+    }
+
+    if (frame.isComplete) {
+      onShotComplete?.();
     }
   });
 
@@ -191,6 +197,12 @@ export function GolfBall({
 
       {/* Trail effect */}
       <BallTrail getPoints={getTrailPoints} color="#a8d4a8" maxOpacity={0.5} />
+
+      {/* Club that strikes the ball */}
+      <GolfClub getSwing={getSwingFrame} ballRadius={ballRadius} />
+
+      {/* Hit mark at the moment of contact */}
+      <ImpactBurst ref={burstRef} size={ballRadius * 0.34} />
     </group>
   );
 }

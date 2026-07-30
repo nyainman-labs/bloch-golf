@@ -12,9 +12,17 @@ interface GamePanelProps {
   gameState: GameState;
   onNextHole: () => void;
   onReset: () => void;
+  soundOn: boolean;
+  onToggleSound: () => void;
 }
 
-export function GamePanel({ gameState, onNextHole, onReset }: GamePanelProps) {
+export function GamePanel({
+  gameState,
+  onNextHole,
+  onReset,
+  soundOn,
+  onToggleSound,
+}: GamePanelProps) {
   const {
     currentHole,
     currentStrokes,
@@ -79,6 +87,14 @@ export function GamePanel({ gameState, onNextHole, onReset }: GamePanelProps) {
       <div className="game-actions">
         <button className="reset-btn" onClick={onReset}>
           Reset Game
+        </button>
+        <button
+          className="sound-btn"
+          onClick={onToggleSound}
+          aria-pressed={soundOn}
+          title={soundOn ? 'Mute impact sound' : 'Unmute impact sound'}
+        >
+          {soundOn ? '🔊' : '🔇'}
         </button>
       </div>
     </div>
