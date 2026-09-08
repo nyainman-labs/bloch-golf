@@ -1,5 +1,12 @@
 packages:
   - "."
 
+# Dependency build scripts are blocked by default since pnpm 10; esbuild needs
+# its postinstall to link the platform binary. `allowBuilds` is the pnpm 11
+# spelling, `onlyBuiltDependencies` the pnpm 10 one — keep both so CI and local
+# installs behave the same whichever version is used.
+allowBuilds:
+  esbuild: true
+
 onlyBuiltDependencies:
   - esbuild

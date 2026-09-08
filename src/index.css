@@ -38,8 +38,8 @@
   --color-accent-warn:   #d97a5a;
 
   /* Typography */
-  --font-sans: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
-  --font-mono: 'JetBrains Mono', 'Fira Code', monospace;
+  --font-sans: 'Inter Variable', 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+  --font-mono: 'JetBrains Mono Variable', 'JetBrains Mono', 'Fira Code', monospace;
 
   /* Spacing */
   --space-xs: 4px;

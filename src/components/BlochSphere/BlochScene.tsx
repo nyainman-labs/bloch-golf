@@ -14,6 +14,7 @@ import { useRef } from 'react';
 import { Canvas, useFrame } from '@react-three/fiber';
 import { OrbitControls, Environment, PerspectiveCamera } from '@react-three/drei';
 import * as THREE from 'three';
+import parkHdri from '@pmndrs/assets/hdri/park.exr';
 import type { BlochState } from '../../types/game';
 import { blochToCartesian } from '../../types/game';
 import type { Shot } from '../../utils/shotQueue';
@@ -79,8 +80,10 @@ function BlochSceneContent({
       <directionalLight position={[-3, 4, -3]} intensity={0.4} />
       <pointLight position={[0, 3, 0]} intensity={0.3} color="#fff9e6" />
 
-      {/* Environment for reflections */}
-      <Environment preset="park" background={false} />
+      {/* Environment for reflections. The HDRI is bundled as a data URI via
+          @pmndrs/assets instead of drei's `preset`, which downloads it from a
+          CDN at runtime and would break offline use. */}
+      <Environment files={parkHdri} background={false} />
 
       {/* Main Bloch sphere components */}
       <group>

@@ -22,6 +22,22 @@
 | \|i+⟩  | i-Plus State  | +Y 軸              | 2   |
 | \|i−⟩  | i-Minus State | -Y 軸              | 2   |
 
+## Offline / オフライン実行
+
+ゲームは完全にクライアントサイドで動作し、実行時に外部通信を行いません
+(量子状態の計算は `@qamposer/react` がブラウザ内で実行し、効果音は Web Audio API
+で合成、フォントと HDRI 環境マップもバンドルに同梱しています)。ビルド済みの静的ファイルを配れば、ネットワークのない
+会場や Raspberry Pi 上でもそのまま動きます。
+
+ビルド済みバンドルは各[リリース](https://github.com/nyainman-labs/bloch-golf/releases)に
+`bloch-golf-<version>.tar.gz` として添付しています。配信手順と注意点は
+[OFFLINE.md](./OFFLINE.md) を参照してください (英語)。
+
+The game is fully client-side and makes no network requests at runtime, so a
+production build can be served from any static web server without an internet
+connection. Pre-built bundles are attached to every release; see
+[OFFLINE.md](./OFFLINE.md) for serving instructions.
+
 ## Tech Stack
 
 - **React 18** + **TypeScript** — UI フレームワーク
@@ -78,3 +94,7 @@ src/
 3. 各ゲートの行列を量子状態 |0⟩ に順番に適用し、最終的なブロッホ球座標を計算
 4. ゲート追加時はゲートの回転軸・角度に沿ったアニメーションを再生（最短経路ではなく物理的に正しい軌道）
 5. ターゲット状態との角度距離が閾値以内ならホールクリア
+
+## License
+
+[Apache-2.0](./LICENSE)
